@@ -1,0 +1,165 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Luna & Skye — Daily Horoscopes</title>
+  <style>
+    :root{
+      --gold:#c8913a;
+      --bg:#ffffff;
+      --text:#111;
+      --card-shadow: 0 6px 18px rgba(17,17,17,0.08);
+      font-family: "Georgia", "Times New Roman", serif;
+    }
+    html,body{height:100%;margin:0;background:var(--bg);color:var(--text);}
+    .wrap{max-width:1100px;margin:36px auto;padding:18px;}
+    .heading{
+      display:flex;align-items:center;justify-content:space-between;
+      gap:12px;
+      margin-bottom:18px;
+    }
+    .title{
+      font-size:20px;letter-spacing:2px;
+      display:flex;flex-direction:column;
+    }
+    .title h1{margin:0;font-size:28px;font-weight:600}
+    .title p{margin:4px 0 0;font-size:13px;color:#444}
+    .grid{
+      display:grid;
+      grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+      gap:18px;
+    }
+    .card{
+      background:#fff;border-radius:14px;padding:18px;
+      box-shadow:var(--card-shadow);border:1px solid rgba(0,0,0,0.04);
+      min-height:140px;display:flex;flex-direction:column;gap:12px;
+    }
+    .signhead{display:flex;align-items:center;justify-content:space-between;}
+    .signname{font-weight:700;letter-spacing:1px;}
+    .glyph{
+      font-size:20px;color:var(--gold);
+      width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+      border:1px solid rgba(200,140,60,0.12);
+    }
+    .desc{flex:1;font-size:14px;color:#222;line-height:1.45;}
+    .date{font-size:12px;color:#666}
+    .loader{opacity:0.6;font-style:italic;font-size:13px}
+    .footer{margin-top:20px;font-size:12px;color:#666;text-align:center}
+    /* Responsive tweaks */
+    @media (max-width:420px){
+      .wrap{padding:12px;}
+      .title h1{font-size:20px}
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap" role="main">
+    <div class="heading">
+      <div class="title" aria-hidden="false">
+        <h1>Luna & Skye</h1>
+        <p>Daily Horoscopes — Updated live</p>
+      </div>
+      <div class="date" id="todayDate" aria-live="polite">Loading date…</div>
+    </div>
+
+    <div class="grid" id="grid">
+      <!-- Cards injected by JavaScript -->
+    </div>
+
+    <div class="footer" id="footer">
+      Powered by Aztro API. If horoscopes fail to load, your host may need a server-side proxy (see instructions).
+    </div>
+  </div>
+
+  <script>
+    // Signs and glyphs (simple glyphs using unicode where available)
+    const SIGNS = [
+      { id: 'aries', label: 'Aries', glyph: '♈' },
+      { id: 'taurus', label: 'Taurus', glyph: '♉' },
+      { id: 'gemini', label: 'Gemini', glyph: '♊' },
+      { id: 'cancer', label: 'Cancer', glyph: '♋' },
+      { id: 'leo', label: 'Leo', glyph: '♌' },
+      { id: 'virgo', label: 'Virgo', glyph: '♍' },
+      { id: 'libra', label: 'Libra', glyph: '♎' },
+      { id: 'scorpio', label: 'Scorpio', glyph: '♏' },
+      { id: 'sagittarius', label: 'Sagittarius', glyph: '♐' },
+      { id: 'capricorn', label: 'Capricorn', glyph: '♑' },
+      { id: 'aquarius', label: 'Aquarius', glyph: '♒' },
+      { id: 'pisces', label: 'Pisces', glyph: '♓' }
+    ];
+
+    // Build card placeholders
+    const grid = document.getElementById('grid');
+    SIGNS.forEach(s => {
+      const card = document.createElement('article');
+      card.className = 'card';
+      card.id = 'card-' + s.id;
+      card.innerHTML = `
+        <div class="signhead">
+          <div class="signname">${s.label}</div>
+          <div class="glyph" aria-hidden="true">${s.glyph}</div>
+        </div>
+        <div class="desc loader" id="desc-${s.id}">Loading…</div>
+      `;
+      grid.appendChild(card);
+    });
+
+    // Insert today's date
+    const todayEl = document.getElementById('todayDate');
+    const now = new Date();
+    todayEl.textContent = now.toLocaleDateString(undefined, {weekday:'short', month:'short', day:'numeric', year:'numeric'});
+
+    // Function to fetch horoscope for one sign using Aztro API.
+    // Note: Aztro expects POST and returns JSON. This client-side fetch works if the API allows CORS.
+    async function fetchSign(sign){
+      const descEl = document.getElementById('desc-' + sign);
+      try {
+        const resp = await fetch('https://aztro.sameerkumar.website/?sign=' + sign + '&day=today', {
+          method: 'POST'
+        });
+        if(!resp.ok) throw new Error('Network response not ok: ' + resp.status);
+        const data = await resp.json();
+        // Aztro returns 'description'
+        descEl.classList.remove('loader');
+        descEl.textContent = data.description || 'No horoscope available today.';
+      } catch (err){
+        console.error('Fetch error for', sign, err);
+        descEl.classList.remove('loader');
+        descEl.textContent = 'Unable to load (see footer).';
+        // mark failure for overall notice
+        window.__horoscopeFetchFailed = true;
+      }
+    }
+
+    // Fetch all signs in parallel (rate is small — 12 requests)
+    async function fetchAll(){
+      window.__horoscopeFetchFailed = false;
+      await Promise.all(SIGNS.map(s => fetchSign(s.id)));
+      // If any failed, update footer with guidance
+      if(window.__horoscopeFetchFailed){
+        document.getElementById('footer').innerHTML = `
+          Powered by Aztro API. It looks like your host or browser blocked the API requests (CORS). 
+          <strong>Fix:</strong> Host this page on Netlify and add a small serverless function to proxy the API, or use Netlify's _redirects to enable server-side calls.
+        `;
+      } else {
+        document.getElementById('footer').textContent = 'Powered by Aztro API. Horoscopes updated live.';
+      }
+    }
+
+    // Start fetching once page loads
+    window.addEventListener('load', fetchAll);
+
+    // Optional: refresh daily at midnight local time (simple approach: check once per hour)
+    setInterval(() => {
+      const last = window.__lastFetch || 0;
+      const oneHour = 1000*60*60;
+      if(Date.now() - last > oneHour){
+        window.__lastFetch = Date.now();
+        fetchAll();
+      }
+    }, 1000*60*30);
+  </script>
+</body>
+</html>
